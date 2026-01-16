@@ -7,7 +7,7 @@ from src.domain.protocol.graph_repository import GraphRepository
 _QUERIES_SETUP = tuple(
     [
         """
-    CREATE TABLE IF NOT EXISTS nodes (
+     CREATE TABLE IF NOT EXISTS nodes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE NOT NULL
     )
@@ -47,4 +47,17 @@ class SqliteGraphRepository(GraphRepository):
             )
 
     def save_edges_batch(self, edges: list[Edge]) -> None:
-        pass
+        """Save a batch of edges using fast executemany."""
+        if not edges:
+            return
+
+        data = [(e.src_node, e.dst_node, e.delay_rise, e.delay_fall) for e in edges]
+
+        with sqlite3.connect(self.db_path) as connection:
+            connection.executemany(
+                """
+                    INSERT INTO edges (src, dst, delay_rise, delay_fall)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                data,
+            )
