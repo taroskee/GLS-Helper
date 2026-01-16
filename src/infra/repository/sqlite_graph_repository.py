@@ -1,5 +1,6 @@
 import sqlite3
 
+from src.domain.model.edge import Edge
 from src.domain.model.node import Node
 from src.domain.protocol.graph_repository import GraphRepository
 
@@ -44,3 +45,6 @@ class SqliteGraphRepository(GraphRepository):
             connection.executemany(
                 "INSERT OR IGNORE INTO nodes (name) VALUES (?)", data
             )
+
+    def save_edges_batch(self, edges: list[Edge]) -> None:
+        pass

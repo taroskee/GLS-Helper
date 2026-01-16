@@ -1,5 +1,6 @@
 from typing import Protocol, runtime_checkable
 
+from src.domain.model.edge import Edge
 from src.domain.model.node import Node
 
 
@@ -13,4 +14,8 @@ class GraphRepository(Protocol):
 
     def save_nodes_batch(self, nodes: list[Node]) -> None:
         """Save a batch of nodes to the database."""
+        ...
+
+    def save_edges_batch(self, edges: list[Edge]) -> None:
+        """Save a batch of edges to the database."""
         ...
