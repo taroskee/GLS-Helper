@@ -1,6 +1,7 @@
 import sqlite3
 
 from src.domain.model.node import Node
+from src.domain.protocol.graph_repository import GraphRepository
 
 _QUERIES_SETUP = tuple(
     [
@@ -22,7 +23,7 @@ _QUERIES_SETUP = tuple(
 )
 
 
-class SqliteGraphRepository:
+class SqliteGraphRepository(GraphRepository):
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
 
@@ -33,5 +34,17 @@ class SqliteGraphRepository:
                 connection.execute(script)
 
     def save_nodes_batch(self, nodes: list[Node]) -> None:
-        """Save a batch of nodes. (Pending Implementation)"""
-        pass
+        """
+        [BAD IMPLEMENTATION]
+        Intentionally slow implementation using a loop to verify performance tests.
+        """
+        if not nodes:
+            return
+
+        with sqlite3.connect(self.db_path) as connection:
+            # 🐌 ここが激遅ポイント
+            # 1件ずつインサートするため、毎回ディスクI/Oとロック処理が走る
+            for node in nodes:
+                connection.execute(
+                    "INSERT OR IGNORE INTO nodes (name) VALUES (?)", (node.name,)
+                )

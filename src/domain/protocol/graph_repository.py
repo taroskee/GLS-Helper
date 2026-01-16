@@ -1,7 +1,9 @@
-from typing import Protocol
-from .models import Node, Edge
+from typing import Protocol, runtime_checkable
+
+from src.domain.model.node import Node
 
 
+@runtime_checkable
 class GraphRepository(Protocol):
     """Protocol for graph data persistence."""
 
