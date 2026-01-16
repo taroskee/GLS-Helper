@@ -1,6 +1,5 @@
-import time
-
 import sqlite3
+from time import perf_counter
 
 from src.domain.model.node import Node
 from src.infra.repository.sqlite_graph_repository import SqliteGraphRepository
@@ -47,7 +46,7 @@ def test_save_nodes_batch_inserts_data(tmp_path):
         cursor = conn.cursor()
 
         cursor.execute("SELECT count(*) FROM nodes")
-        assert cursor.fetchone()[0] == 3
+        assert cursor.fetchone()[0] == len(nodes)
 
         cursor.execute("SELECT name FROM nodes ORDER BY name")
         names = [row[0] for row in cursor.fetchall()]
@@ -57,7 +56,7 @@ def test_save_nodes_batch_inserts_data(tmp_path):
 def test_save_nodes_batch_performance(tmp_path):
     """
     Performance Test:
-    Ensures that bulk insert handles 100,000 records within a reasonable time (e.g., < 2.0s).
+    Ensures that bulk insert handles 1,000,000 records within a reasonable time.
     If 'executemany' is implemented correctly, this should take less than 1 second.
     If implemented with a loop, it would take > 60 seconds.
     """
@@ -71,11 +70,11 @@ def test_save_nodes_batch_performance(tmp_path):
     nodes = [Node(name=f"top.module.u{i}") for i in range(node_count)]
 
     # Act: 計測開始
-    start_time = time.perf_counter()
+    start_time = perf_counter()
 
     repo.save_nodes_batch(nodes)
 
-    end_time = time.perf_counter()
+    end_time = perf_counter()
     # Act: 計測終了
 
     # Assert
@@ -86,5 +85,5 @@ def test_save_nodes_batch_performance(tmp_path):
 
     assert duration < threshold_seconds, (
         f"Performance regression detected! "
-        f"Took {duration:.4f}s for {node_count} records (Threshold: {threshold_seconds}s)"
+        f"Took {duration:.4f}s for {node_count} records (over {threshold_seconds}s)"
     )
