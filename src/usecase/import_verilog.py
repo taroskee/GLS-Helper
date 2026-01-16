@@ -1,11 +1,11 @@
+from domain.protocol.verilog_parser import VerilogParser
 from src.domain.protocol.graph_repository import GraphRepository
-from src.domain.protocol.netlist_parser import NetlistParser
 
 
-class ImportGateUseCase:
-    """Orchestrates the import process from Netlist file to Repository."""
+class ImportVerilogUseCase:
+    """Orchestrates the import process from verilog file to Repository."""
 
-    def __init__(self, repo: GraphRepository, parser: NetlistParser) -> None:
+    def __init__(self, repo: GraphRepository, parser: VerilogParser) -> None:
         self._repo = repo
         self._parser = parser
 

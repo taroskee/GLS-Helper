@@ -1,8 +1,7 @@
 from unittest.mock import MagicMock, call
 
-from src.domain.model.edge import Edge
 from src.domain.model.node import Node
-from src.usecase.import_gate import ImportGateUseCase  # まだ無い
+from src.usecase.import_verilog import ImportVerilogUseCase  # まだ無い
 
 
 def test_execute_orchestrates_parsing_and_saving():
@@ -20,7 +19,7 @@ def test_execute_orchestrates_parsing_and_saving():
     mock_parser.parse_nodes.return_value = iter(batches)
     mock_parser.parse_edges.return_value = iter(tuple())
 
-    use_case = ImportGateUseCase(repo=mock_repo, parser=mock_parser)
+    use_case = ImportVerilogUseCase(repo=mock_repo, parser=mock_parser)
 
     # Act
     use_case.execute("dummy.v")
