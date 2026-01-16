@@ -1,5 +1,4 @@
 import sqlite3
-from time import perf_counter
 
 from src.domain.model.edge import Edge
 from src.domain.model.node import Node
