@@ -34,17 +34,13 @@ class SqliteGraphRepository(GraphRepository):
                 connection.execute(script)
 
     def save_nodes_batch(self, nodes: list[Node]) -> None:
-        """
-        [BAD IMPLEMENTATION]
-        Intentionally slow implementation using a loop to verify performance tests.
-        """
+        """Save a batch of nodes using fast executemany."""
         if not nodes:
             return
 
+        data = [(n.name,) for n in nodes]
+
         with sqlite3.connect(self.db_path) as connection:
-            # 🐌 ここが激遅ポイント
-            # 1件ずつインサートするため、毎回ディスクI/Oとロック処理が走る
-            for node in nodes:
-                connection.execute(
-                    "INSERT OR IGNORE INTO nodes (name) VALUES (?)", (node.name,)
-                )
+            connection.executemany(
+                "INSERT OR IGNORE INTO nodes (name) VALUES (?)", data
+            )
