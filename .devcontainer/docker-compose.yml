@@ -1,0 +1,16 @@
+services:
+  app:
+    build: 
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+      args:
+        USERNAME: vscode
+    volumes:
+      # プロジェクトルート全体をマウント
+      - ..:/workspace:cached
+    
+    # プロセスを永続化
+    command: sleep infinity
+    
+    # ユーザー権限の設定
+    user: vscode
