@@ -1,0 +1,45 @@
+[project]
+name = "gls-helper"
+version = "0.1.0"
+description = "GLS Helper for huge Gate/SDF files using Stream processing and SQLite"
+requires-python = ">=3.13"
+dependencies = [
+    "click>=8.1.7",
+    "rich>=13.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "pytest-watch>=4.2.0",
+    "ruff>=0.3.0",
+    "mypy>=1.9.0",
+    "types-click",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+# --- Tools Configuration ---
+
+[tool.pytest.ini_options]
+addopts = "-ra -q --cov=src"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "B", "UP", "PL"] 
+ignore = []
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+ignore_missing_imports = true
+check_untyped_defs = true
