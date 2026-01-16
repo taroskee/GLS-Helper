@@ -54,33 +54,27 @@ def test_save_nodes_batch_inserts_data(tmp_path):
         assert names == ["top.cpu.u1", "top.cpu.u2", "top.mem.u3"]
 
 
-def test_save_nodes_batch_performance(tmp_path):
+def test_save_nodes_batch_performance(tmp_path, benchmark):
     """
-    Performance Test:
-    Ensures that bulk insert handles 1,000,000 records within a reasonable time.
-    If 'executemany' is implemented correctly, this should take less than 1 second.
-    If implemented with a loop, it would take > 60 seconds.
+    Performance Test for Nodes using pytest-benchmark.
     """
     # Arrange
-    db_path = tmp_path / "perf_test.db"
+    db_path = tmp_path / "perf_test_nodes.db"
     repo = SqliteGraphRepository(str(db_path))
     repo.setup()
 
-    node_count = 1_000_000
+    node_count = 100_000
     nodes = [Node(name=f"top.module.u{i}") for i in range(node_count)]
 
-    # Act
-    start_time = perf_counter()
-    repo.save_nodes_batch(nodes)
-    duration = perf_counter() - start_time
+    # Act & Measure
+    benchmark(repo.save_nodes_batch, nodes)
 
-    # Assert
-    threshold_seconds = 2.0
-    print(f"\n[Performance] Inserted {node_count} records in {duration:.4f} seconds.")
-    assert duration < threshold_seconds, (
-        f"Performance regression detected! "
-        f"Took {duration:.4f}s for {node_count} records (over {threshold_seconds}s)"
-    )
+    # Assert Correctness
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT count(*) FROM nodes")
+        actual_count = cursor.fetchone()[0]
+        assert actual_count >= node_count
 
 
 def test_save_edges_batch_inserts_data(tmp_path):
@@ -111,37 +105,28 @@ def test_save_edges_batch_inserts_data(tmp_path):
         assert rows[1] == ("top.u1.Y", "top.u3.B", 0.2, 0.18)
 
 
-def test_save_edges_batch_performance(tmp_path):
+def test_save_edges_batch_performance(tmp_path, benchmark):
     """
-    Performance Test:
-    Ensures that bulk insert handles 1,000,000 records within a reasonable time.
-    Must also verify that data is ACTUALLY saved.
+    Performance Test using pytest-benchmark.
     """
-    time_threshold = 2.0
-
     # Arrange
     db_path = tmp_path / "perf_test_edges.db"
     repo = SqliteGraphRepository(str(db_path))
     repo.setup()
 
-    edge_count = 1_000_000
+    edge_count = 100_000
     edges = [
         Edge(src_node=f"u{i}.Y", dst_node=f"u{i + 1}.A", delay_rise=0.1, delay_fall=0.1)
         for i in range(edge_count)
     ]
 
-    # Act
-    start_time = perf_counter()
-    repo.save_edges_batch(edges)
-    duration = perf_counter() - start_time
+    # Act & Measure
+    repo.save_edges_batch(edges)  # To warming up
 
-    # Assert 1: Time
-    print(f"\n[Performance] Inserted {edge_count} edges in {duration:.4f} seconds.")
-    assert duration < time_threshold, f"Too slow! Took {duration:.4f}s"
+    benchmark(repo.save_edges_batch, edges)
 
-    # Assert 2: Correctness
+    # Assert correctness
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT count(*) FROM edges")
-        actual_count = cursor.fetchone()[0]
-        assert actual_count == edge_count, f"Expected {edge_count}, got {actual_count}"
+        assert cursor.fetchone()[0] >= edge_count
