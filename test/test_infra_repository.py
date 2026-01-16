@@ -1,3 +1,5 @@
+import time
+
 import sqlite3
 
 from src.domain.model.node import Node
@@ -44,11 +46,45 @@ def test_save_nodes_batch_inserts_data(tmp_path):
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
 
-        # 件数確認
         cursor.execute("SELECT count(*) FROM nodes")
         assert cursor.fetchone()[0] == 3
 
-        # 内容確認 (順不同なのでsetで比較、またはORDER BY)
         cursor.execute("SELECT name FROM nodes ORDER BY name")
         names = [row[0] for row in cursor.fetchall()]
         assert names == ["top.cpu.u1", "top.cpu.u2", "top.mem.u3"]
+
+
+def test_save_nodes_batch_performance(tmp_path):
+    """
+    Performance Test:
+    Ensures that bulk insert handles 100,000 records within a reasonable time (e.g., < 2.0s).
+    If 'executemany' is implemented correctly, this should take less than 1 second.
+    If implemented with a loop, it would take > 60 seconds.
+    """
+    # Arrange
+    db_path = tmp_path / "perf_test.db"
+    repo = SqliteGraphRepository(str(db_path))
+    repo.setup()
+
+    # 10万件のダミーデータを生成 (この時間は計測に含めない)
+    node_count = 1_000_000
+    nodes = [Node(name=f"top.module.u{i}") for i in range(node_count)]
+
+    # Act: 計測開始
+    start_time = time.perf_counter()
+
+    repo.save_nodes_batch(nodes)
+
+    end_time = time.perf_counter()
+    # Act: 計測終了
+
+    # Assert
+    duration = end_time - start_time
+    threshold_seconds = 2.0  # Docker環境でも余裕を持ってクリアできるライン
+
+    print(f"\n[Performance] Inserted {node_count} records in {duration:.4f} seconds.")
+
+    assert duration < threshold_seconds, (
+        f"Performance regression detected! "
+        f"Took {duration:.4f}s for {node_count} records (Threshold: {threshold_seconds}s)"
+    )
