@@ -3,7 +3,6 @@ from typing import Final
 
 from src.domain.model.edge import Edge
 from src.domain.model.node import Node
-from src.domain.protocol.graph_repository import GraphRepository
 
 _SQLS_SETUP: Final[tuple[str, ...]] = (
     """
@@ -29,7 +28,7 @@ _SQL_INSERT_EDGE: Final[str] = """
 """
 
 
-class SqliteGraphRepository(GraphRepository):
+class SqliteGraphRepository:
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
 

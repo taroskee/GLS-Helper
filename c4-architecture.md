@@ -189,7 +189,7 @@ sequenceDiagram
 
 * **メソッド**: インデントを含むロジックは5行以内を目指す。
 * **条件分岐**: `if/else` のネストを避け、早期リターンまたはポリモーフィズム、辞書ディスパッチを使用する。
-* **変数**: 再代入を禁止（可能な限り `Final` や `frozen=True` なdataclassを使用）。
+* **変数**: 再代入を禁止（可能な限り`frozen=True` なdataclassを使用）。
 
 ### Dependency Rule
 
