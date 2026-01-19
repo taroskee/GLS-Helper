@@ -19,12 +19,18 @@ _SQLS_SETUP: tuple[str, ...] = (
         delay_fall REAL
     )
     """,
+    "CREATE INDEX IF NOT EXISTS idx_edges_src_dst ON edges(src, dst)",
 )
 
 _SQL_INSERT_NODE: str = "INSERT OR IGNORE INTO nodes (name) VALUES (?)"
 _SQL_INSERT_EDGE: str = """
     INSERT INTO edges (src, dst, delay_rise, delay_fall)
     VALUES (?, ?, ?, ?)
+"""
+_SQL_UPDATE_EDGE_DELAY: str = """
+    UPDATE edges 
+    SET delay_rise = ?, delay_fall = ?
+    WHERE src = ? AND dst = ?
 """
 
 
@@ -40,9 +46,7 @@ class SqliteGraphRepository(GraphRepository):
         connection = sqlite3.connect(self.db_path)
         try:
             with connection:
-                # WAL mode: To improve multi-thread writing
                 connection.execute("PRAGMA journal_mode = WAL")
-                # NORMAL mode: To improve writing speed
                 connection.execute("PRAGMA synchronous = NORMAL")
 
                 for script in _SQLS_SETUP:
@@ -78,10 +82,16 @@ class SqliteGraphRepository(GraphRepository):
         finally:
             connection.close()
 
-    def update_edges_delay_batch(self, edges):
-        return [
-            Edge(
-                "",
-                "",
-            ),
-        ]
+    def update_edges_delay_batch(self, edges: list[Edge]) -> None:
+        """Updates delay information for a batch of edges."""
+        if not edges:
+            return
+
+        data = [(e.delay_rise, e.delay_fall, e.src_node, e.dst_node) for e in edges]
+
+        connection = sqlite3.connect(self.db_path)
+        try:
+            with connection:
+                connection.executemany(_SQL_UPDATE_EDGE_DELAY, data)
+        finally:
+            connection.close()
