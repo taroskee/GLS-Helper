@@ -1,5 +1,5 @@
 import sqlite3
-
+from contextlib import closing
 from src.domain.model.edge import Edge
 from src.domain.model.node import Node
 from src.infra.repository.sqlite_graph_repository import SqliteGraphRepository
@@ -7,7 +7,7 @@ from src.infra.repository.sqlite_graph_repository import SqliteGraphRepository
 
 def test_repository_setup_creates_tables(tmp_path):
     """Verify that setup() creates the necessary tables."""
-    # Arrange: Use a temporary path for the DB
+    # Arrange
     db_path = tmp_path / "test_gls.db"
     repo = SqliteGraphRepository(str(db_path))
 
@@ -15,7 +15,7 @@ def test_repository_setup_creates_tables(tmp_path):
     repo.setup()
 
     # Assert
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn:
         cursor = conn.cursor()
 
         cursor.execute(
@@ -42,9 +42,8 @@ def test_save_nodes_batch_inserts_data(tmp_path):
     repo.save_nodes_batch(nodes)
 
     # Assert
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn:
         cursor = conn.cursor()
-
         cursor.execute("SELECT count(*) FROM nodes")
         assert cursor.fetchone()[0] == len(nodes)
 
@@ -69,7 +68,7 @@ def test_save_nodes_batch_performance(tmp_path, benchmark):
     benchmark(repo.save_nodes_batch, nodes)
 
     # Assert Correctness
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT count(*) FROM nodes")
         actual_count = cursor.fetchone()[0]
@@ -92,7 +91,7 @@ def test_save_edges_batch_inserts_data(tmp_path):
     repo.save_edges_batch(edges)
 
     # Assert
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT src, dst, delay_rise, delay_fall FROM edges ORDER BY dst"
@@ -120,12 +119,12 @@ def test_save_edges_batch_performance(tmp_path, benchmark):
     ]
 
     # Act & Measure
-    repo.save_edges_batch(edges)  # To warming up
+    repo.save_edges_batch(edges)  # Warming up
 
     benchmark(repo.save_edges_batch, edges)
 
     # Assert correctness
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT count(*) FROM edges")
         assert cursor.fetchone()[0] >= edge_count
