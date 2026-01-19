@@ -11,7 +11,7 @@ def parser() -> VerilogStreamParser:
 
 
 def test_verilog_parser_with_real_content(parser):
-    paths_verilog = Path("test/input/real_content").glob("*.v")
+    paths_verilog = Path("test/input/infra/real_content").glob("*.v")
 
     batches = tuple(parser.parse_edges(paths_verilog, batch_size=100))
     edges_all = (e for batch in batches for e in batch)
