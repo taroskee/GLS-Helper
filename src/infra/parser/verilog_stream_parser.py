@@ -5,24 +5,25 @@ from pathlib import Path
 
 from src.domain.model.edge import Edge
 from src.domain.model.node import Node
+from src.domain.protocol.verilog_parser import VerilogParser
 
 
-class VerilogStreamParser:
+class VerilogStreamParser(VerilogParser):
     _RE_WIRE = re.compile(r"^\s*(?:wire|input|output)\s+(?:\[.*?\]\s*)?(\w+);")
     _RE_INST_START = re.compile(r"^\s*(\w+)\s+(\w+)\s*\(")
     _RE_PIN_CONNECTION = re.compile(r"\.(\w+)\s*\(\s*(\w+)\s*\)")
 
     def parse_nodes(
-        self, path_verilog_dir: Path, batch_size: int = 10000
+        self, path_verilog: Path, batch_size: int = 10000
     ) -> Iterator[tuple[Node, ...]]:
-        lines = self._read_lines(path_verilog_dir)
+        lines = self._read_lines(path_verilog)
         nodes = self._extract_nodes(lines)
         yield from self._batch_data(nodes, batch_size)
 
     def parse_edges(
-        self, path_verilog_dir: Path, batch_size: int = 10000
+        self, path_verilog: Path, batch_size: int = 10000
     ) -> Iterator[tuple[Edge, ...]]:
-        lines = self._read_lines(path_verilog_dir)
+        lines = self._read_lines(path_verilog)
         edges = self._extract_edges(lines)
         yield from self._batch_data(edges, batch_size)
 

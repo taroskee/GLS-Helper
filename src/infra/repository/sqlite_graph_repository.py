@@ -1,10 +1,10 @@
 import sqlite3
-from typing import Final
 
 from src.domain.model.edge import Edge
 from src.domain.model.node import Node
+from src.domain.protocol.graph_repository import GraphRepository
 
-_SQLS_SETUP: Final[tuple[str, ...]] = (
+_SQLS_SETUP: tuple[str, ...] = (
     """
     CREATE TABLE IF NOT EXISTS nodes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,14 +21,14 @@ _SQLS_SETUP: Final[tuple[str, ...]] = (
     """,
 )
 
-_SQL_INSERT_NODE: Final[str] = "INSERT OR IGNORE INTO nodes (name) VALUES (?)"
-_SQL_INSERT_EDGE: Final[str] = """
+_SQL_INSERT_NODE: str = "INSERT OR IGNORE INTO nodes (name) VALUES (?)"
+_SQL_INSERT_EDGE: str = """
     INSERT INTO edges (src, dst, delay_rise, delay_fall)
     VALUES (?, ?, ?, ?)
 """
 
 
-class SqliteGraphRepository:
+class SqliteGraphRepository(GraphRepository):
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
 

@@ -1,5 +1,6 @@
 import sqlite3
 from contextlib import closing
+
 from src.domain.model.edge import Edge
 from src.domain.model.node import Node
 from src.infra.repository.sqlite_graph_repository import SqliteGraphRepository
