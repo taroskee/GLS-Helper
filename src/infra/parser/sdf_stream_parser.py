@@ -1,5 +1,7 @@
+import dataclasses
 import re
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
 
@@ -7,10 +9,20 @@ from src.domain.model.edge import Edge
 from src.domain.protocol.sdf_parser import SDFParser
 
 
+@dataclass(frozen=True)
+class _ParseContext:
+    """Tracks the state of parsing across lines (Immutable)."""
+
+    buffer: tuple[str, ...] = ()
+    balance: int = 0
+    in_record: bool = False
+
+
 class SDFStreamParser(SDFParser):
     _RE_INTERCONNECT = re.compile(
         r"\(INTERCONNECT\s+([\w/\[\]]+)\s+([\w/\[\]]+)\s+\(.*?::([\d\.\-]+)\)\s+\(.*?::([\d\.\-]+)\)"
     )
+    _RE_PARENS = re.compile(r"[()]")
 
     def parse_delays(
         self, path_sdf: Path, batch_size: int = 10000
@@ -19,8 +31,6 @@ class SDFStreamParser(SDFParser):
         statements = self._yield_interconnect_blocks(lines)
         edges = self._extract_edges(statements)
         yield from self._batch_data(edges, batch_size)
-
-    # --- Private Helpers ---
 
     def _read_lines(self, path: Path) -> Iterator[str]:
         with path.open(encoding="utf-8") as f:
@@ -32,80 +42,72 @@ class SDFStreamParser(SDFParser):
             yield batch
 
     def _yield_interconnect_blocks(self, lines: Iterator[str]) -> Iterator[str]:
-        """
-        Yields complete (INTERCONNECT ...) blocks.
-        Ignores outer nesting (like DELAYFILE, CELL) and handles multi-line blocks.
-        """
-        buffer: list[str] = []
-        balance = 0
-        in_record = False
-
-        # Regex to find parenthesis tokens to speed up parsing
-        # We only care about parentheses to track nesting balance
-        re_parens = re.compile(r"[()]")
-
+        """Orchestrates the extraction of INTERCONNECT blocks."""
+        ctx = _ParseContext()
         for line in lines:
-            # Optimization: Skip irrelevant lines quickly if not currently parsing a block
-            if not in_record and "(INTERCONNECT" not in line:
-                continue
+            if self._should_process(line, ctx):
+                ctx, blocks = self._process_line(line, ctx)
+                yield from blocks
 
-            pos = 0
-            while pos < len(line):
-                # 1. Find start of block if we are not in one
-                if not in_record:
-                    start = line.find("(INTERCONNECT", pos)
-                    if start == -1:
-                        break  # No more blocks on this line
+    def _should_process(self, line: str, ctx: _ParseContext) -> bool:
+        return ctx.in_record or "(INTERCONNECT" in line
 
-                    in_record = True
-                    balance = 0
-                    pos = start
-                    # Do not increment pos yet; the loop below needs to count the opening '('
+    def _process_line(
+        self, line: str, ctx: _ParseContext
+    ) -> tuple[_ParseContext, list[str]]:
+        """Driver loop: Iterates through the line delegating segment processing."""
+        extracted = []
+        pos = 0
+        while pos < len(line):
+            ctx, pos, block = self._process_segment(line, pos, ctx)
+            if block:
+                extracted.append(block)
+        return ctx, extracted
 
-                # 2. Scan parentheses to find the end of the block
-                remainder = line[pos:]
-                found_end = False
-                end_relative_idx = 0
+    def _process_segment(
+        self, line: str, pos: int, ctx: _ParseContext
+    ) -> tuple[_ParseContext, int, str | None]:
+        """Delegates based on whether we are inside a record or looking for one."""
+        if not ctx.in_record:
+            return self._find_and_start_block(line, pos, ctx)
+        return self._accumulate_block_content(line, pos, ctx)
 
-                # Iterate over all parens in the remainder of the line
-                for match in re_parens.finditer(remainder):
-                    char = match.group()
-                    if char == "(":
-                        balance += 1
-                    else:
-                        balance -= 1
+    def _find_and_start_block(
+        self, line: str, pos: int, ctx: _ParseContext
+    ) -> tuple[_ParseContext, int, str | None]:
+        """Seeks the start of a block. If found, initializes context and proceeds."""
+        start = self._seek_start(line, pos)
+        if start == -1:
+            return ctx, len(line), None
+        new_ctx = dataclasses.replace(ctx, in_record=True, balance=0)
+        return self._accumulate_block_content(line, start, new_ctx)
 
-                    if balance == 0:
-                        # Found the matching closing parenthesis
-                        end_relative_idx = match.end()
-                        found_end = True
-                        break
+    def _accumulate_block_content(
+        self, line: str, pos: int, ctx: _ParseContext
+    ) -> tuple[_ParseContext, int, str | None]:
+        """Reads content until block ends or line ends."""
+        chunk, bal, done = self._scan_block_end(line[pos:], ctx.balance)
+        next_ctx = dataclasses.replace(ctx, buffer=ctx.buffer + (chunk,), balance=bal)
+        if done:
+            return _ParseContext(), pos + len(chunk), "".join(next_ctx.buffer)
+        return next_ctx, pos + len(chunk), None
 
-                if found_end:
-                    # Append the part up to the closing paren
-                    chunk = remainder[:end_relative_idx]
-                    buffer.append(chunk)
+    def _seek_start(self, line: str, pos: int) -> int:
+        return line.find("(INTERCONNECT", pos)
 
-                    yield "".join(buffer)
-
-                    # Reset for next block
-                    buffer = []
-                    in_record = False
-                    pos += end_relative_idx
-                else:
-                    # The block continues to the next line
-                    buffer.append(remainder)
-                    break  # Go to next line
+    def _scan_block_end(self, text: str, current_balance: int) -> tuple[str, int, bool]:
+        """Scans text for parentheses balance."""
+        is_finished: bool = False
+        balance = current_balance
+        for match in self._RE_PARENS.finditer(text):
+            balance += 1 if match.group() == "(" else -1
+            if balance == 0:
+                is_finished = True
+                return text[: match.end()], balance, is_finished
+        return text, balance, is_finished
 
     def _extract_edges(self, statements: Iterator[str]) -> Iterator[Edge]:
-        """Parses complete statements to create Edge objects with delay."""
         for stmt in statements:
-            match = self._RE_INTERCONNECT.search(stmt)
-            if match:
+            if match := self._RE_INTERCONNECT.search(stmt):
                 src, dst, rise, fall = match.groups()
-                yield Edge(
-                    src_node=src,
-                    dst_node=dst,
-                    delay_rise=float(rise),
-                    delay_fall=float(fall),
-                )
+                yield Edge(src, dst, float(rise), float(fall))
