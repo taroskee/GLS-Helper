@@ -19,3 +19,7 @@ class GraphRepository(Protocol):
     def save_edges_batch(self, edges: list[Edge]) -> None:
         """Save a batch of edges to the database."""
         ...
+
+    def update_edges_delay_batch(self, edges: list[Edge]) -> None:
+        """Update delay information for existing edges."""
+        ...

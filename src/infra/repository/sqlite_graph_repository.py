@@ -77,3 +77,11 @@ class SqliteGraphRepository(GraphRepository):
                 connection.executemany(_SQL_INSERT_EDGE, data)
         finally:
             connection.close()
+
+    def update_edges_delay_batch(self, edges):
+        return [
+            Edge(
+                "",
+                "",
+            ),
+        ]
