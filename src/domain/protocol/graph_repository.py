@@ -25,7 +25,7 @@ class GraphRepository(Protocol):
         ...
 
     def find_max_delay_path(
-        self, start_node: str, end_node: str, max_depth: int = 100
+        self, start_node: str, end_node: str | None = None, max_depth: int = 100
     ) -> tuple[Edge]:
         """
         Finds the path with the maximum accumulated delay between start and end nodes.

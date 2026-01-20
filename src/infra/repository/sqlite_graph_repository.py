@@ -94,6 +94,69 @@ class SqliteGraphRepository(GraphRepository):
             connection.close()
 
     def find_max_delay_path(
-        self, start_node: str, end_node: str, max_depth: int = 100
-    ) -> tuple[Edge]:
-        return (Edge("", ""),)
+        self, start_node: str, end_node: str | None = None, max_depth: int = 100
+    ) -> list[Edge]:
+        """Finds the max delay path using Recursive CTE."""
+
+        # Base query (共通部分)
+        sql_recursive_base = """
+        WITH RECURSIVE paths(current_node, path_str, total_delay, depth) AS (
+            SELECT 
+                dst, 
+                src || ',' || dst, 
+                MAX(delay_rise, delay_fall), 
+                1
+            FROM edges 
+            WHERE src = ?
+
+            UNION ALL
+
+            SELECT 
+                e.dst, 
+                p.path_str || ',' || e.dst, 
+                p.total_delay + MAX(e.delay_rise, e.delay_fall), 
+                p.depth + 1
+            FROM edges e
+            JOIN paths p ON e.src = p.current_node
+            WHERE p.depth < ? 
+              AND instr(p.path_str, e.dst) = 0
+        )
+        SELECT path_str FROM paths 
+        """
+
+        where_clause = "WHERE current_node = ? " if end_node else ""
+        order_clause = "ORDER BY total_delay DESC LIMIT 1"
+
+        final_sql = f"{sql_recursive_base} {where_clause} {order_clause}"
+
+        params = [start_node, max_depth]
+        if end_node:
+            params.append(end_node)
+
+        path_str = None
+        with closing(sqlite3.connect(self.db_path)) as conn:
+            cursor = conn.cursor()
+            cursor.execute(final_sql, tuple(params))
+            row = cursor.fetchone()
+            if row:
+                path_str = row[0]
+
+        if not path_str:
+            return tuple()
+
+        nodes = path_str.split(",")
+        edges = []
+        with closing(sqlite3.connect(self.db_path)) as conn:
+            cursor = conn.cursor()
+            for i in range(len(nodes) - 1):
+                src = nodes[i]
+                dst = nodes[i + 1]
+                cursor.execute(
+                    "SELECT src, dst, delay_rise, delay_fall FROM edges WHERE src = ? AND dst = ?",
+                    (src, dst),
+                )
+                row = cursor.fetchone()
+                if row:
+                    edges.append(Edge(row[0], row[1], row[2], row[3]))
+
+        return tuple(edges)
