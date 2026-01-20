@@ -18,7 +18,6 @@ def test_execute_orchestrates_parsing_and_saving():
     batches: tuple[tuple[Node, ...]] = (batch_1, batch_2)
 
     mock_parser.parse_nodes.return_value = iter(batches)
-    mock_parser.parse_edges.return_value = iter(tuple())
 
     use_case = ImportVerilogUseCase(repo=mock_repo, parser=mock_parser)
     dummy_path = Path("dummy.v")  # str -> Path
@@ -30,4 +29,4 @@ def test_execute_orchestrates_parsing_and_saving():
     assert mock_repo.save_nodes_batch.call_count == len(batches)
     mock_repo.save_nodes_batch.assert_has_calls([call(batch_1), call(batch_2)])
 
-    mock_parser.parse_nodes.assert_called_with(dummy_path)
+    mock_parser.parse_nodes.assert_called_with(dummy_path, observer=None)

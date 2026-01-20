@@ -1,70 +1,78 @@
 import re
-from collections.abc import Iterable, Iterator
-from itertools import islice
+from collections.abc import Iterator
 from pathlib import Path
 
 from src.domain.model.edge import Edge
 from src.domain.model.node import Node
+from src.domain.protocol.progress_observer import ProgressObserver
 from src.domain.protocol.verilog_parser import VerilogParser
 
 
 class VerilogStreamParser(VerilogParser):
     _RE_WIRE = re.compile(r"^\s*(?:wire|input|output)\s+(?:\[.*?\]\s*)?(\w+)\s*;")
+    _RE_ASSIGN = re.compile(r"^\s*assign\s+(\w+)\s*=\s*(\w+)\s*;")
     _RE_INST_START = re.compile(r"^\s*(\w+)\s+(\w+)\s*\(")
-    _RE_PIN_CONNECTION = re.compile(r"\.(\w+)\s*\(\s*(\w+)\s*\)")
+    _RE_PIN = re.compile(r"\.\s*(\w+)\s*\(\s*(\w+)\s*\)")
+    _RE_INST_END = re.compile(r"\)\s*;")
 
     def parse_nodes(
-        self, path_verilog: Path, batch_size: int = 10000
+        self,
+        path: Path,
+        batch_size: int = 10000,
+        observer: ProgressObserver | None = None,
     ) -> Iterator[tuple[Node, ...]]:
-        lines = self._read_lines(path_verilog)
-        nodes = self._extract_nodes(lines)
-        yield from self._batch_data(nodes, batch_size)
+        batch: list[Node] = []
+        for line in self._read_lines(path):
+            if observer:
+                observer.update(len(line))
+
+            if match := self._RE_WIRE.search(line):
+                batch.append(Node(match.group(1)))
+
+            if len(batch) >= batch_size:
+                yield tuple(batch)
+                batch = []
+
+        if batch:
+            yield tuple(batch)
 
     def parse_edges(
-        self, path_verilog: Path, batch_size: int = 10000
+        self,
+        path: Path,
+        batch_size: int = 10000,
+        observer: ProgressObserver | None = None,
     ) -> Iterator[tuple[Edge, ...]]:
-        lines = self._read_lines(path_verilog)
-        edges = self._extract_edges(lines)
-        yield from self._batch_data(edges, batch_size)
+        batch: list[Edge] = []
+        current_inst_name: str | None = None
+
+        for line in self._read_lines(path):
+            if observer:
+                observer.update(len(line))
+
+            if match := self._RE_ASSIGN.search(line):
+                batch.append(Edge(match.group(2), match.group(1), 0.0, 0.0))
+                continue
+
+            if match := self._RE_INST_START.search(line):
+                current_inst_name = match.group(2)
+
+            if current_inst_name:
+                for match in self._RE_PIN.finditer(line):
+                    pin_name = match.group(1)
+                    net_name = match.group(2)
+                    src_node = f"{current_inst_name}.{pin_name}"
+                    dst_node = net_name
+                    batch.append(Edge(src_node, dst_node, 0.0, 0.0))
+            if self._RE_INST_END.search(line):
+                current_inst_name = None
+
+            if len(batch) >= batch_size:
+                yield tuple(batch)
+                batch = []
+
+        if batch:
+            yield tuple(batch)
 
     def _read_lines(self, path: Path) -> Iterator[str]:
-        """Reads file line by line lazily."""
         with path.open(encoding="utf-8") as f:
             yield from f
-
-    def _batch_data(self, data: Iterable, size: int) -> Iterator[tuple]:
-        """Groups data into batches of specified size."""
-        iterator = iter(data)
-        while batch := tuple(islice(iterator, size)):
-            yield batch
-
-    def _extract_nodes(self, lines: Iterator[str]) -> Iterator[Node]:
-        """Parses lines to find wire/input/output definitions."""
-        for line in lines:
-            if match := self._RE_WIRE.search(line):
-                yield Node(match.group(1))
-
-    def _extract_edges(self, lines: Iterator[str]) -> Iterator[Edge]:
-        """Parses lines to find instance connections, maintaining state."""
-        inst: str | None = None
-        for line in lines:
-            inst = self._update_inst_start(line, inst)
-            yield from self._find_connections(line, inst)
-            inst = self._update_inst_end(line, inst)
-
-    def _update_inst_start(self, line: str, current: str | None) -> str | None:
-        """Updates instance name if a new instance declaration starts."""
-        if match := self._RE_INST_START.search(line):
-            return match.group(2)
-        return current
-
-    def _update_inst_end(self, line: str, current: str | None) -> str | None:
-        """Resets instance name if the declaration ends."""
-        return None if ";" in line else current
-
-    def _find_connections(self, line: str, inst: str | None) -> Iterator[Edge]:
-        """Yields Edges found in the current line for the active instance."""
-        if not inst:
-            return
-        for match in self._RE_PIN_CONNECTION.finditer(line):
-            yield Edge(src_node=f"{inst}.{match.group(1)}", dst_node=match.group(2))

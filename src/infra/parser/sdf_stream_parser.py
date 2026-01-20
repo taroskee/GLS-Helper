@@ -6,6 +6,7 @@ from itertools import islice
 from pathlib import Path
 
 from src.domain.model.edge import Edge
+from src.domain.protocol.progress_observer import ProgressObserver
 from src.domain.protocol.sdf_parser import SDFParser
 
 
@@ -25,16 +26,25 @@ class SDFStreamParser(SDFParser):
     _RE_PARENS = re.compile(r"[()]")
 
     def parse_delays(
-        self, path_sdf: Path, batch_size: int = 10000
+        self,
+        path_sdf: Path,
+        batch_size: int = 10000,
+        observer: ProgressObserver | None = None,
     ) -> Iterator[tuple[Edge, ...]]:
-        lines = self._read_lines(path_sdf)
-        statements = self._yield_interconnect_blocks(lines)
-        edges = self._extract_edges(statements)
-        yield from self._batch_data(edges, batch_size)
+        # observer を渡しつつ、戻り値は Edge のみ
+        lines_gen = self._read_lines(path_sdf, observer)
+        blocks_gen = self._yield_interconnect_blocks(lines_gen)
+        edges_gen = self._extract_edges(blocks_gen)
+        yield from self._batch_data(edges_gen, batch_size)
 
-    def _read_lines(self, path: Path) -> Iterator[str]:
+    def _read_lines(
+        self, path: Path, observer: ProgressObserver | None
+    ) -> Iterator[str]:
         with path.open(encoding="utf-8") as f:
-            yield from f
+            for line in f:
+                if observer:
+                    observer.update(len(line))
+                yield line
 
     def _batch_data(self, data: Iterable, size: int) -> Iterator[tuple]:
         iterator = iter(data)

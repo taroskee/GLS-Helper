@@ -7,16 +7,16 @@ from src.interface.cli import cli
 
 
 def test_cli_import_verilog_calls_usecase():
-    """
-    Verify that 'import-verilog' command correctly invokes ImportVerilogUseCase.
-    """
     runner = CliRunner()
     mock_usecase = MagicMock()
 
     with runner.isolated_filesystem():
         Path("design.v").touch()
 
-        with patch("src.interface.cli.ImportVerilogUseCase") as mock_class:
+        with (
+            patch("src.interface.cli.tqdm"),
+            patch("src.interface.cli.ImportVerilogUseCase") as mock_class,
+        ):
             mock_class.return_value = mock_usecase
 
             # Act
@@ -26,24 +26,23 @@ def test_cli_import_verilog_calls_usecase():
 
             # Assert
             assert result.exit_code == 0, f"Command failed: {result.output}"
-            assert "Importing Verilog" in result.output
-
             mock_usecase.execute.assert_called_once()
-            args, _ = mock_usecase.execute.call_args
+            args, kwargs = mock_usecase.execute.call_args
             assert args[0].name == "design.v"
+            assert "observer" in kwargs or len(args) > 1
 
 
 def test_cli_import_sdf_calls_usecase():
-    """
-    Verify that 'import-sdf' command correctly invokes ImportSDFUseCase.
-    """
     runner = CliRunner()
     mock_usecase = MagicMock()
 
     with runner.isolated_filesystem():
         Path("delay.sdf").touch()
 
-        with patch("src.interface.cli.ImportSDFUseCase") as mock_class:
+        with (
+            patch("src.interface.cli.tqdm"),
+            patch("src.interface.cli.ImportSDFUseCase") as mock_class,
+        ):
             mock_class.return_value = mock_usecase
 
             # Act
@@ -51,8 +50,8 @@ def test_cli_import_sdf_calls_usecase():
 
             # Assert
             assert result.exit_code == 0, f"Command failed: {result.output}"
-            assert "Importing SDF" in result.output
 
             mock_usecase.execute.assert_called_once()
-            args, _ = mock_usecase.execute.call_args
+            args, kwargs = mock_usecase.execute.call_args
             assert args[0].name == "delay.sdf"
+            assert "observer" in kwargs or len(args) > 1

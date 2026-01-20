@@ -28,7 +28,7 @@ def test_execute_orchestrates_parsing_and_updating():
     use_case.execute(dummy_path)
 
     # Assert
-    mock_parser.parse_delays.assert_called_once_with(dummy_path)
+    mock_parser.parse_delays.assert_called_once_with(dummy_path, observer=None)
 
     assert mock_repo.update_edges_delay_batch.call_count == len([batch_1, batch_2])
     mock_repo.update_edges_delay_batch.assert_has_calls([call(batch_1), call(batch_2)])

@@ -1,25 +1,26 @@
 from pathlib import Path
 
 from src.domain.protocol.graph_repository import GraphRepository
+from src.domain.protocol.progress_observer import ProgressObserver
 from src.domain.protocol.verilog_parser import VerilogParser
 
 
 class ImportVerilogUseCase:
-    """Orchestrates the import process from verilog file to Repository."""
-
     def __init__(self, repo: GraphRepository, parser: VerilogParser) -> None:
         self._repo = repo
         self._parser = parser
 
-    def execute(self, file_path: Path) -> None:
-        """Parses the file and saves data in batches."""
-        self._import_nodes(file_path)
-        self._import_edges(file_path)
+    def execute(
+        self, file_path: Path, observer: ProgressObserver | None = None
+    ) -> None:
+        if observer:
+            observer.set_description("Importing Nodes...")
 
-    def _import_nodes(self, file_path: Path) -> None:
-        for batch in self._parser.parse_nodes(file_path):
+        for batch in self._parser.parse_nodes(file_path, observer=observer):
             self._repo.save_nodes_batch(batch)
 
-    def _import_edges(self, file_path: Path) -> None:
-        for batch in self._parser.parse_edges(file_path):
+        if observer:
+            observer.set_description("Importing Edges...")
+
+        for batch in self._parser.parse_edges(file_path, observer=observer):
             self._repo.save_edges_batch(batch)
