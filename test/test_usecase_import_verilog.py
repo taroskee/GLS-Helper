@@ -1,12 +1,13 @@
+from pathlib import Path
 from unittest.mock import MagicMock, call
 
 from src.domain.model.node import Node
-from src.usecase.import_verilog import ImportVerilogUseCase  # まだ無い
+from src.usecase.import_verilog import ImportVerilogUseCase
 
 
 def test_execute_orchestrates_parsing_and_saving():
     """
-    Verfy UseCase recieves batch from Parser to Repository
+    Verify UseCase receives batch from Parser to Repository
     """
     # Arrange
     mock_repo = MagicMock()
@@ -20,11 +21,13 @@ def test_execute_orchestrates_parsing_and_saving():
     mock_parser.parse_edges.return_value = iter(tuple())
 
     use_case = ImportVerilogUseCase(repo=mock_repo, parser=mock_parser)
+    dummy_path = Path("dummy.v")  # str -> Path
 
     # Act
-    use_case.execute("dummy.v")
+    use_case.execute(dummy_path)
 
     # Assert
     assert mock_repo.save_nodes_batch.call_count == len(batches)
     mock_repo.save_nodes_batch.assert_has_calls([call(batch_1), call(batch_2)])
-    mock_parser.parse_nodes.assert_called_with("dummy.v")
+
+    mock_parser.parse_nodes.assert_called_with(dummy_path)
