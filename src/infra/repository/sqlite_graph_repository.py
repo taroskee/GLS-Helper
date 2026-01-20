@@ -1,5 +1,6 @@
 import sqlite3
 from contextlib import closing
+from typing import Any
 
 from src.domain.model.edge import Edge
 from src.domain.model.node import Node
@@ -40,109 +41,89 @@ class SqliteGraphRepository(GraphRepository):
         self.db_path = db_path
 
     def setup(self) -> None:
-        with closing(sqlite3.connect(self.db_path)) as connection:
-            with connection:
-                connection.execute("PRAGMA journal_mode = WAL")
-                connection.execute("PRAGMA synchronous = NORMAL")
+        """Initialize DB schema with performance tuning."""
+        with closing(self._connect()) as conn:
+            with conn:
                 for script in _SQLS_SETUP:
-                    connection.execute(script)
+                    conn.execute(script)
 
     def save_nodes_batch(self, nodes: tuple[Node]) -> None:
-        if not nodes:
-            return
         data = [(n.name,) for n in nodes]
-        connection = sqlite3.connect(self.db_path)
-        try:
-            with connection:
-                connection.executemany(_SQL_INSERT_NODE, data)
-        finally:
-            connection.close()
+        self._executemany(_SQL_INSERT_NODE, data)
 
     def save_edges_batch(self, edges: tuple[Edge]) -> None:
-        if not edges:
-            return
         data = [(e.src_node, e.dst_node, e.delay_rise, e.delay_fall) for e in edges]
-        connection = sqlite3.connect(self.db_path)
-        try:
-            with connection:
-                connection.executemany(_SQL_INSERT_EDGE, data)
-        finally:
-            connection.close()
+        self._executemany(_SQL_INSERT_EDGE, data)
 
     def update_edges_delay_batch(self, edges: tuple[Edge]) -> None:
-        if not edges:
-            return
         data = [(e.delay_rise, e.delay_fall, e.dst_node) for e in edges]
-        connection = sqlite3.connect(self.db_path)
-        try:
-            with connection:
-                connection.executemany(_SQL_UPDATE_EDGE_DELAY, data)
-        finally:
-            connection.close()
+        self._executemany(_SQL_UPDATE_EDGE_DELAY, data)
 
     def find_max_delay_path(
         self, start_node: str, end_node: str | None = None, max_depth: int = 100
-    ) -> tuple[Edge]:
+    ) -> tuple[Edge, ...]:
         """Finds the max delay path using Recursive CTE."""
+        path_str = self._fetch_max_delay_path_string(start_node, end_node, max_depth)
+        if not path_str:
+            return tuple()
+        return self._reconstruct_edges_from_path(path_str)
 
-        sql_recursive_base = """
+    def _connect(self) -> sqlite3.Connection:
+        """Creates a connection with performance settings."""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
+        return conn
+
+    def _executemany(self, sql: str, data: list[Any]) -> None:
+        """Executes batch operation within a transaction."""
+        if not data:
+            return
+        with closing(self._connect()) as conn:
+            with conn:
+                conn.executemany(sql, data)
+
+    def _fetch_max_delay_path_string(
+        self, start: str, end: str | None, depth: int
+    ) -> str | None:
+        """Executes the recursive query and returns the path string."""
+        sql = self._build_recursive_query(end is not None)
+        params = [start, depth]
+        if end:
+            params.append(end)
+
+        with closing(self._connect()) as conn:
+            row = conn.execute(sql, tuple(params)).fetchone()
+            return row[0] if row else None
+
+    def _build_recursive_query(self, has_end_node: bool) -> str:
+        """Constructs the recursive CTE SQL."""
+        base_sql = """
         WITH RECURSIVE paths(current_node, path_str, total_delay, depth) AS (
-            SELECT
-                dst,
-                src || ',' || dst,
-                MAX(delay_rise, delay_fall),
-                1
-            FROM edges
-            WHERE src = ?
-
+            SELECT dst, src || ',' || dst, MAX(delay_rise, delay_fall), 1
+            FROM edges WHERE src = ?
             UNION ALL
-
-            SELECT
-                e.dst,
-                p.path_str || ',' || e.dst,
-                p.total_delay + MAX(e.delay_rise, e.delay_fall),
-                p.depth + 1
-            FROM edges e
-            JOIN paths p ON e.src = p.current_node
-            WHERE p.depth < ?
-              AND instr(p.path_str, e.dst) = 0
+            SELECT e.dst, p.path_str || ',' || e.dst,
+                   p.total_delay + MAX(e.delay_rise, e.delay_fall), p.depth + 1
+            FROM edges e JOIN paths p ON e.src = p.current_node
+            WHERE p.depth < ? AND instr(p.path_str, e.dst) = 0
         )
         SELECT path_str FROM paths
         """
-        query_select = "SELECT src, dst, delay_rise, delay_fall"
+        where = "WHERE current_node = ?" if has_end_node else ""
+        order = "ORDER BY total_delay DESC LIMIT 1"
+        return f"{base_sql} {where} {order}"
 
-        where_clause = "WHERE current_node = ? " if end_node else ""
-        order_clause = "ORDER BY total_delay DESC LIMIT 1"
-
-        final_sql = f"{sql_recursive_base} {where_clause} {order_clause}"
-
-        params = [start_node, max_depth]
-        if end_node:
-            params.append(end_node)
-
-        path_str = None
-        with closing(sqlite3.connect(self.db_path)) as conn:
-            cursor = conn.cursor()
-            cursor.execute(final_sql, tuple(params))
-            row = cursor.fetchone()
-            if row:
-                path_str = row[0]
-
-        if not path_str:
-            return tuple()
-
+    def _reconstruct_edges_from_path(self, path_str: str) -> tuple[Edge, ...]:
+        """Reconstructs Edge objects from a comma-separated node string."""
         nodes = path_str.split(",")
-        edges = []
-        with closing(sqlite3.connect(self.db_path)) as conn:
+        edges: list[Edge] = []
+        sql = "SELECT src, dst, delay_rise, delay_fall FROM edges WHERE src=? AND dst=?"
+
+        with closing(self._connect()) as conn:
             cursor = conn.cursor()
             for i in range(len(nodes) - 1):
-                src = nodes[i]
-                dst = nodes[i + 1]
-                cursor.execute(
-                    f"{query_select} FROM edges WHERE src = ? AND dst = ?", (src, dst)
-                )
-                row = cursor.fetchone()
-                if row:
-                    edges.append(Edge(row[0], row[1], row[2], row[3]))
+                if row := cursor.execute(sql, (nodes[i], nodes[i + 1])).fetchone():
+                    edges.append(Edge(*row))
 
         return tuple(edges)
