@@ -13,6 +13,12 @@ def parser() -> VerilogStreamParser:
 def test_verilog_parser_with_real_content(parser):
     path_verilog = Path("test/input/infra/real_content/CHIPTOP_Decoder_inst_design.v")
 
+    node_batches = tuple(parser.parse_nodes(path_verilog, batch_size=100))
+    nodes_all = [n for batch in node_batches for n in batch]
+
+    assert len(nodes_all) > 0, "Nodes should be extracted!"
+    assert any(n.name == "SAMPLE" for n in nodes_all)
+
     batches = tuple(parser.parse_edges(path_verilog, batch_size=100))
     edges_all = (e for batch in batches for e in batch)
 
