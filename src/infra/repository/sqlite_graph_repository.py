@@ -28,7 +28,7 @@ _SQL_INSERT_EDGE: str = """
     VALUES (?, ?, ?, ?)
 """
 _SQL_UPDATE_EDGE_DELAY: str = """
-    UPDATE edges 
+    UPDATE edges
     SET delay_rise = ?, delay_fall = ?
     WHERE src = ? AND dst = ?
 """

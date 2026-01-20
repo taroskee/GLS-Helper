@@ -134,6 +134,7 @@ def test_save_edges_batch_performance(tmp_path, benchmark):
 def test_update_edges_delay_batch_updates_existing_records(tmp_path):
     """Verify that update_edges_delay_batch correctly updates delay values."""
     # Arrange
+    query_select = "SELECT dst, delay_rise, delay_fall"
     db_path = tmp_path / "test_delay_update.db"
     repo = SqliteGraphRepository(str(db_path))
     repo.setup()
@@ -154,9 +155,7 @@ def test_update_edges_delay_batch_updates_existing_records(tmp_path):
     # Assert
     with closing(sqlite3.connect(db_path)) as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT dst, delay_rise, delay_fall FROM edges WHERE src='u1.Q' ORDER BY dst"
-        )
+        cursor.execute(f"{query_select} FROM edges WHERE src='u1.Q' ORDER BY dst")
         rows = {row[0]: (row[1], row[2]) for row in cursor.fetchall()}
 
         assert rows["u2.A"] == (0.1, 0.15)
