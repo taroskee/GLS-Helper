@@ -12,6 +12,7 @@ def test_parse_delays_extracts_interconnect_delays(parser, tmp_path):
     """
     Verify that INTERCONNECT delays are correctly parsed,
     even when spread across multiple lines.
+    Also verifies name normalization (slash to dot).
     """
     # Arrange
     sdf_content = """
@@ -43,12 +44,14 @@ def test_parse_delays_extracts_interconnect_delays(parser, tmp_path):
     # Assert
     assert len(edges) == num_edges
 
-    edge1 = next(e for e in edges if e.dst_node == "u2/A")
-    assert edge1.src_node == "u1/Q"
+    edge1 = next((e for e in edges if e.dst_node == "u2.A"), None)
+    assert edge1 is not None, "Edge with dst 'u2.A' not found"
+    assert edge1.src_node == "u1.Q"
     assert edge1.delay_rise == max_1_rise_fall
     assert edge1.delay_fall == max_1_rise_fall
 
-    edge2 = next(e for e in edges if e.dst_node == "u3/B")
-    assert edge2.src_node == "u1/Q"
+    edge2 = next((e for e in edges if e.dst_node == "u3.B"), None)
+    assert edge2 is not None, "Edge with dst 'u3.B' not found"
+    assert edge2.src_node == "u1.Q"
     assert edge2.delay_rise == max_2_rise
     assert edge2.delay_fall == max_2_fall

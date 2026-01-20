@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import closing
 
 from src.domain.model.edge import Edge
 from src.infra.parser.sdf_stream_parser import SDFStreamParser
@@ -70,7 +71,7 @@ def test_reproduce_sdf_update_mismatch(tmp_path):
 
 
 def _fetch_edges(db_path) -> list[Edge]:
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT src, dst, delay_rise, delay_fall FROM edges")
         return [

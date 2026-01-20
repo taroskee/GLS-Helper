@@ -107,7 +107,20 @@ class SDFStreamParser(SDFParser):
         return text, balance, is_finished
 
     def _extract_edges(self, statements: Iterator[str]) -> Iterator[Edge]:
+        """Parses complete statements to create Edge objects."""
         for stmt in statements:
             if match := self._RE_INTERCONNECT.search(stmt):
-                src, dst, rise, fall = match.groups()
+                src_raw, dst_raw, rise, fall = match.groups()
+                src = self._normalize_name(src_raw)
+                dst = self._normalize_name(dst_raw)
+
                 yield Edge(src, dst, float(rise), float(fall))
+
+    def _normalize_name(self, raw_name: str) -> str:
+        """Converts SDF hierarchical path to local Verilog name."""
+        num_last_inst_pin = 2
+        converted = raw_name.replace("/", ".")
+        parts = converted.split(".")
+        if len(parts) >= num_last_inst_pin:
+            return f"{parts[-2]}.{parts[-1]}"
+        return converted
