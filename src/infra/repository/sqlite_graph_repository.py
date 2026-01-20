@@ -40,10 +40,6 @@ class SqliteGraphRepository(GraphRepository):
         self.db_path = db_path
 
     def setup(self) -> None:
-        """
-        Orchestrates the database schema initialization.
-        Also applies performance tuning for massive write operations.
-        """
         with closing(sqlite3.connect(self.db_path)) as connection:
             with connection:
                 connection.execute("PRAGMA journal_mode = WAL")
@@ -52,12 +48,9 @@ class SqliteGraphRepository(GraphRepository):
                     connection.execute(script)
 
     def save_nodes_batch(self, nodes: tuple[Node]) -> None:
-        """Save a batch of nodes using fast executemany."""
         if not nodes:
             return
-
         data = [(n.name,) for n in nodes]
-
         connection = sqlite3.connect(self.db_path)
         try:
             with connection:
@@ -66,12 +59,9 @@ class SqliteGraphRepository(GraphRepository):
             connection.close()
 
     def save_edges_batch(self, edges: tuple[Edge]) -> None:
-        """Save a batch of edges using fast executemany."""
         if not edges:
             return
-
         data = [(e.src_node, e.dst_node, e.delay_rise, e.delay_fall) for e in edges]
-
         connection = sqlite3.connect(self.db_path)
         try:
             with connection:
@@ -80,12 +70,9 @@ class SqliteGraphRepository(GraphRepository):
             connection.close()
 
     def update_edges_delay_batch(self, edges: tuple[Edge]) -> None:
-        """Updates delay information mapping SDF destination to DB source pin."""
         if not edges:
             return
-
         data = [(e.delay_rise, e.delay_fall, e.dst_node) for e in edges]
-
         connection = sqlite3.connect(self.db_path)
         try:
             with connection:
@@ -95,34 +82,34 @@ class SqliteGraphRepository(GraphRepository):
 
     def find_max_delay_path(
         self, start_node: str, end_node: str | None = None, max_depth: int = 100
-    ) -> list[Edge]:
+    ) -> tuple[Edge]:
         """Finds the max delay path using Recursive CTE."""
 
-        # Base query (共通部分)
         sql_recursive_base = """
         WITH RECURSIVE paths(current_node, path_str, total_delay, depth) AS (
-            SELECT 
-                dst, 
-                src || ',' || dst, 
-                MAX(delay_rise, delay_fall), 
+            SELECT
+                dst,
+                src || ',' || dst,
+                MAX(delay_rise, delay_fall),
                 1
-            FROM edges 
+            FROM edges
             WHERE src = ?
 
             UNION ALL
 
-            SELECT 
-                e.dst, 
-                p.path_str || ',' || e.dst, 
-                p.total_delay + MAX(e.delay_rise, e.delay_fall), 
+            SELECT
+                e.dst,
+                p.path_str || ',' || e.dst,
+                p.total_delay + MAX(e.delay_rise, e.delay_fall),
                 p.depth + 1
             FROM edges e
             JOIN paths p ON e.src = p.current_node
-            WHERE p.depth < ? 
+            WHERE p.depth < ?
               AND instr(p.path_str, e.dst) = 0
         )
-        SELECT path_str FROM paths 
+        SELECT path_str FROM paths
         """
+        query_select = "SELECT src, dst, delay_rise, delay_fall"
 
         where_clause = "WHERE current_node = ? " if end_node else ""
         order_clause = "ORDER BY total_delay DESC LIMIT 1"
@@ -152,8 +139,7 @@ class SqliteGraphRepository(GraphRepository):
                 src = nodes[i]
                 dst = nodes[i + 1]
                 cursor.execute(
-                    "SELECT src, dst, delay_rise, delay_fall FROM edges WHERE src = ? AND dst = ?",
-                    (src, dst),
+                    f"{query_select} FROM edges WHERE src = ? AND dst = ?", (src, dst)
                 )
                 row = cursor.fetchone()
                 if row:
