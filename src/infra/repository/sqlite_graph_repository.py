@@ -51,7 +51,7 @@ class SqliteGraphRepository(GraphRepository):
                 for script in _SQLS_SETUP:
                     connection.execute(script)
 
-    def save_nodes_batch(self, nodes: list[Node]) -> None:
+    def save_nodes_batch(self, nodes: tuple[Node]) -> None:
         """Save a batch of nodes using fast executemany."""
         if not nodes:
             return
@@ -65,7 +65,7 @@ class SqliteGraphRepository(GraphRepository):
         finally:
             connection.close()
 
-    def save_edges_batch(self, edges: list[Edge]) -> None:
+    def save_edges_batch(self, edges: tuple[Edge]) -> None:
         """Save a batch of edges using fast executemany."""
         if not edges:
             return
@@ -79,7 +79,7 @@ class SqliteGraphRepository(GraphRepository):
         finally:
             connection.close()
 
-    def update_edges_delay_batch(self, edges: list[Edge]) -> None:
+    def update_edges_delay_batch(self, edges: tuple[Edge]) -> None:
         """Updates delay information mapping SDF destination to DB source pin."""
         if not edges:
             return
@@ -92,3 +92,8 @@ class SqliteGraphRepository(GraphRepository):
                 connection.executemany(_SQL_UPDATE_EDGE_DELAY, data)
         finally:
             connection.close()
+
+    def find_max_delay_path(
+        self, start_node: str, end_node: str, max_depth: int = 100
+    ) -> tuple[Edge]:
+        return (Edge("", ""),)

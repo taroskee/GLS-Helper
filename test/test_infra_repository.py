@@ -141,3 +141,40 @@ def test_update_edges_delay_batch_updates_existing_records(tmp_path):
         assert rows["u2.A"] == (0.1, 0.15)
         assert rows["u3.B"] == (0.0, 0.0)
         assert rows["u4.C"] == (0.2, 0.25)
+
+
+def test_find_max_delay_path_without_end_node(tmp_path):
+    r"""
+    Verify that if end_node is None, it finds the path with the absolute max delay
+    starting from start_node to ANY reachable node.
+
+    Graph Topology:
+        A --(1.0)--> B --(1.0)--> D (Total: 2.0)
+          \
+           \--(5.0)--> C --(5.0)--> E (Total: 10.0) -> Critical Path!
+    """
+    # Arrange
+    db_path = tmp_path / "test_path_any_end.db"
+    repo = SqliteGraphRepository(str(db_path))
+    repo.setup()
+
+    edges = [
+        Edge("A", "B", 1.0, 1.0),
+        Edge("B", "D", 1.0, 1.0),
+        Edge("A", "C", 5.0, 5.0),
+        Edge("C", "E", 5.0, 5.0),
+    ]
+    repo.save_edges_batch(edges)
+
+    # Act
+    path = repo.find_max_delay_path(start_node="A", end_node=None, max_depth=10)
+
+    # Assert
+    len_paths = 2
+    delay_a_to_c = 5.0
+    delay_c_to_e = 5.0
+    assert len(path) == len_paths
+    assert path[0].dst_node == "C"
+    assert path[1].dst_node == "E"
+    assert path[0].delay_rise == delay_a_to_c
+    assert path[1].delay_rise == delay_c_to_e
