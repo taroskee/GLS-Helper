@@ -9,7 +9,7 @@ from src.domain.protocol.verilog_parser import VerilogParser
 
 
 class VerilogStreamParser(VerilogParser):
-    _RE_WIRE = re.compile(r"^\s*(?:wire|input|output)\s+(?:\[.*?\]\s*)?(\w+);")
+    _RE_WIRE = re.compile(r"^\s*(?:wire|input|output)\s+(?:\[.*?\]\s*)?(\w+)\s*;")
     _RE_INST_START = re.compile(r"^\s*(\w+)\s+(\w+)\s*\(")
     _RE_PIN_CONNECTION = re.compile(r"\.(\w+)\s*\(\s*(\w+)\s*\)")
 
