@@ -16,5 +16,8 @@ class ImportSDFUseCase:
         if observer:
             observer.set_description("Importing Delays...")
 
-        for batch in self._parser.parse_delays(file_path, observer=observer):
-            self._repo.update_edges_delay_batch(batch)
+        with self._repo.bulk_mode():
+            for batch in self._parser.parse_delays(
+                file_path, batch_size=100000, observer=observer
+            ):
+                self._repo.update_edges_delay_batch(batch)

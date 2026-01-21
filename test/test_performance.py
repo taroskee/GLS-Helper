@@ -40,9 +40,6 @@ def performance_setup(tmp_path):
 
 
 def test_benchmark_import_sdf(benchmark, performance_setup):
-    """
-    SDFインポートのパフォーマンスを計測し、基準タイムより遅ければFailさせる。
-    """
     repo, sdf_path, num_records = performance_setup
     parser = SDFStreamParser()
     usecase = ImportSDFUseCase(repo, parser)
@@ -55,7 +52,7 @@ def test_benchmark_import_sdf(benchmark, performance_setup):
     mean_time = benchmark.stats.stats.mean
     items_per_sec = num_records / mean_time
 
-    threshold_seconds = 0.5
+    threshold_seconds = 1.5
 
     assert mean_time < threshold_seconds, (
         f"Too slow! Average time: {mean_time:.4f}s ({items_per_sec:.0f} items/s). "

@@ -1,3 +1,4 @@
+from contextlib import AbstractContextManager
 from typing import Protocol, runtime_checkable
 
 from src.domain.model.edge import Edge
@@ -31,4 +32,8 @@ class GraphRepository(Protocol):
         Finds the path with the maximum accumulated delay between start and end nodes.
         Returns the tuple of edges forming that path.
         """
+
         ...
+
+    def bulk_mode(self) -> AbstractContextManager:
+        """Context manager for bulk operations."""
