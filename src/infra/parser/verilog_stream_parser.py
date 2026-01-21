@@ -22,9 +22,9 @@ class VerilogStreamParser(VerilogParser):
         observer: ProgressObserver | None = None,
     ) -> Iterator[tuple[Node, ...]]:
         batch: list[Node] = []
-        for line in self._read_lines(path):
+        for line, raw_len in self._read_lines(path):
             if observer:
-                observer.update(len(line))
+                observer.update(raw_len)
 
             if match := self._RE_WIRE.search(line):
                 batch.append(Node(match.group(1)))
@@ -45,9 +45,9 @@ class VerilogStreamParser(VerilogParser):
         batch: list[Edge] = []
         current_inst_name: str | None = None
 
-        for line in self._read_lines(path):
+        for line, raw_len in self._read_lines(path):
             if observer:
-                observer.update(len(line))
+                observer.update(raw_len)
 
             if match := self._RE_ASSIGN.search(line):
                 batch.append(Edge(match.group(2), match.group(1), 0.0, 0.0))
@@ -63,6 +63,7 @@ class VerilogStreamParser(VerilogParser):
                     src_node = f"{current_inst_name}.{pin_name}"
                     dst_node = net_name
                     batch.append(Edge(src_node, dst_node, 0.0, 0.0))
+
             if self._RE_INST_END.search(line):
                 current_inst_name = None
 
@@ -73,6 +74,8 @@ class VerilogStreamParser(VerilogParser):
         if batch:
             yield tuple(batch)
 
-    def _read_lines(self, path: Path) -> Iterator[str]:
-        with path.open(encoding="utf-8") as f:
-            yield from f
+    def _read_lines(self, path: Path) -> Iterator[tuple[str, int]]:
+        with path.open("rb") as f:
+            for line_bytes in f:
+                line_str = line_bytes.decode("utf-8", errors="replace")
+                yield line_str, len(line_bytes)

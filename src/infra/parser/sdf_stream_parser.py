@@ -31,7 +31,6 @@ class SDFStreamParser(SDFParser):
         batch_size: int = 10000,
         observer: ProgressObserver | None = None,
     ) -> Iterator[tuple[Edge, ...]]:
-        # observer を渡しつつ、戻り値は Edge のみ
         lines_gen = self._read_lines(path_sdf, observer)
         blocks_gen = self._yield_interconnect_blocks(lines_gen)
         edges_gen = self._extract_edges(blocks_gen)
@@ -40,11 +39,12 @@ class SDFStreamParser(SDFParser):
     def _read_lines(
         self, path: Path, observer: ProgressObserver | None
     ) -> Iterator[str]:
-        with path.open(encoding="utf-8") as f:
-            for line in f:
+        with path.open("rb") as f:
+            for line_bytes in f:
                 if observer:
-                    observer.update(len(line))
-                yield line
+                    observer.update(len(line_bytes))
+
+                yield line_bytes.decode("utf-8", errors="replace")
 
     def _batch_data(self, data: Iterable, size: int) -> Iterator[tuple]:
         iterator = iter(data)

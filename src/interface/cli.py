@@ -34,13 +34,13 @@ def cli() -> None:
 @click.option("--db", "-d", default="gls.db", help="Path to SQLite database")
 def import_verilog(verilog_file: Path, db: str) -> None:
     """Import Gate Netlist (Verilog) into the database."""
-    # tqdmの表示と被らないよう、開始メッセージは削除またはtqdm内で表示
+    count_node_and_gate = 2
     repo = SqliteGraphRepository(db_path=db)
     repo.setup()
     parser = VerilogStreamParser()
     usecase = ImportVerilogUseCase(repo, parser)
 
-    total_size = verilog_file.stat().st_size
+    total_size = verilog_file.stat().st_size * count_node_and_gate
 
     with tqdm(total=total_size, unit="B", unit_scale=True, desc="Initializing") as pbar:
         observer = TqdmObserver(pbar)
@@ -107,4 +107,7 @@ def trace_path(start_node: str, end_node: str | None, db: str) -> None:
 
 
 if __name__ == "__main__":
-    cli()
+    try:
+        cli()
+    except KeyboardInterrupt as e:
+        print(e)
