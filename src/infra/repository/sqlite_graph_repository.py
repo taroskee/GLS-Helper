@@ -34,7 +34,7 @@ _SQL_INSERT_EDGE: str = """
 class SqliteGraphRepository(GraphRepository):
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
-        self._active_conn: sqlite3.Connection | None = None
+        self._active_connection: sqlite3.Connection | None = None
 
     def setup(self) -> None:
         """Initialize DB schema with performance tuning."""
@@ -45,25 +45,23 @@ class SqliteGraphRepository(GraphRepository):
 
     @contextmanager
     def bulk_mode(self):
-        """
-        Use a single connection for multiple batch operations.
-        Dramatically improves performance by keeping page cache warm.
-        """
-        if self._active_conn:
+        """Use a single connection for multiple batch operations."""
+        if self._active_connection:
             yield
             return
 
-        self._active_conn = self._connect()
+        self._active_connection = self._connect()
         try:
             yield
         finally:
-            self._active_conn.close()
-            self._active_conn = None
+            if self._active_connection:
+                self._active_connection.close()
+                self._active_connection = None
 
-    def _get_conn(self) -> sqlite3.Connection:
+    def _get_connection(self) -> sqlite3.Connection:
         """Returns active connection or opens a new temporary one."""
-        if self._active_conn:
-            return self._active_conn
+        if self._active_connection:
+            return self._active_connection
         return self._connect()
 
     def save_nodes_batch(self, nodes: tuple[Node]) -> None:
@@ -79,59 +77,67 @@ class SqliteGraphRepository(GraphRepository):
             return
 
         data = [(e.dst_node, e.delay_rise, e.delay_fall) for e in edges]
-
-        conn = self._get_conn()
-        should_close = self._active_conn is None
+        connection = self._get_connection()
+        should_close = self._active_connection is None
 
         try:
-            with conn:  # Transaction
-                conn.execute(
+            with connection:
+                connection.execute(
                     "CREATE TEMPORARY TABLE IF NOT EXISTS batch_updates "
                     "(node TEXT PRIMARY KEY, rise REAL, fall REAL)"
                 )
-                conn.executemany(
+                connection.executemany(
                     "INSERT OR REPLACE INTO batch_updates (node, rise, fall) VALUES (?, ?, ?)",
                     data,
                 )
-                conn.execute("""
+                connection.execute("""
                     UPDATE edges
                     SET delay_rise = batch_updates.rise,
                         delay_fall = batch_updates.fall
                     FROM batch_updates
                     WHERE edges.src = batch_updates.node
                 """)
-                conn.execute("DELETE FROM batch_updates")
+                connection.execute("DELETE FROM batch_updates")
         finally:
             if should_close:
-                conn.close()
+                connection.close()
+
+    def find_max_delay_path(
+        self, start_node: str, end_node: str | None = None, max_depth: int = 100
+    ) -> tuple[Edge, ...]:
+        """Finds the max delay path using Recursive CTE."""
+        path_str = self._fetch_max_delay_path_string(start_node, end_node, max_depth)
+
+        if not path_str:
+            return tuple()
+
+        return self._reconstruct_edges_from_path(path_str)
 
     def _connect(self) -> sqlite3.Connection:
         """Creates a connection with performance settings."""
-        conn = sqlite3.connect(self.db_path)
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA synchronous = NORMAL")
-        conn.execute("PRAGMA temp_store = MEMORY")
-        conn.execute("PRAGMA cache_size = -64000")  # 64MB Cache
-        return conn
+        connection = sqlite3.connect(self.db_path)
+        connection.execute("PRAGMA journal_mode = WAL")
+        connection.execute("PRAGMA synchronous = NORMAL")
+        connection.execute("PRAGMA temp_store = MEMORY")
+        connection.execute("PRAGMA cache_size = -64000")
+        return connection
 
     def _executemany(self, sql: str, data: list[Any]) -> None:
         if not data:
             return
 
-        conn = self._get_conn()
-        should_close = self._active_conn is None
-
+        connection = self._get_connection()
+        should_close = self._active_connection is None
         try:
-            with conn:
-                conn.executemany(sql, data)
+            with connection:  # Commit transaction
+                connection.executemany(sql, data)
         finally:
             if should_close:
-                conn.close()
+                connection.close()
 
     def _fetch_max_delay_path_string(
         self, start: str, end: str | None, depth: int
     ) -> str | None:
-        """Executes the recursive query and returns the path string."""
         sql = self._build_recursive_query(end is not None)
         params = [start, depth]
         if end:
@@ -142,7 +148,6 @@ class SqliteGraphRepository(GraphRepository):
             return row[0] if row else None
 
     def _build_recursive_query(self, has_end_node: bool) -> str:
-        """Constructs the recursive CTE SQL."""
         base_sql = """
         WITH RECURSIVE paths(current_node, path_str, total_delay, depth) AS (
             SELECT dst, src || ',' || dst, MAX(delay_rise, delay_fall), 1
@@ -160,7 +165,6 @@ class SqliteGraphRepository(GraphRepository):
         return f"{base_sql} {where} {order}"
 
     def _reconstruct_edges_from_path(self, path_str: str) -> tuple[Edge, ...]:
-        """Reconstructs Edge objects from a comma-separated node string."""
         nodes = path_str.split(",")
         edges: list[Edge] = []
         sql = "SELECT src, dst, delay_rise, delay_fall FROM edges WHERE src=? AND dst=?"

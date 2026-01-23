@@ -1,10 +1,24 @@
 import sqlite3
 from contextlib import closing
 
+import pytest
+
 from src.domain.model.edge import Edge
 from src.infra.parser.sdf_stream_parser import SDFStreamParser
 from src.infra.repository.sqlite_graph_repository import SqliteGraphRepository
 from src.usecase.import_sdf import ImportSDFUseCase
+
+
+@pytest.fixture
+def repo_with_data(tmp_path):
+    db_path = tmp_path / "repro.db"
+    repo = SqliteGraphRepository(str(db_path))
+    repo.setup()
+
+    edge = Edge("u_cell_3491.ZN", "net1966", 0.0, 0.0)
+    repo.save_edges_batch((edge,))
+
+    return repo
 
 
 def test_reproduce_sdf_update_mismatch(tmp_path):
@@ -78,3 +92,45 @@ def _fetch_edges(db_path) -> list[Edge]:
             Edge(src_node=row[0], dst_node=row[1], delay_rise=row[2], delay_fall=row[3])
             for row in cursor.fetchall()
         ]
+
+
+def test_anchor_query_works(repo_with_data):
+    with sqlite3.connect(repo_with_data.db_path) as conn:
+        row = conn.execute(
+            "SELECT src, dst FROM edges WHERE src = ?", ("u_cell_3491.ZN",)
+        ).fetchone()
+
+    assert row is not None, "Anchor query failed! Source node not found in DB."
+    assert row[0] == "u_cell_3491.ZN"
+    assert row[1] == "net1966"
+
+
+def test_fetch_path_string_returns_csv(repo_with_data):
+    start = "u_cell_3491.ZN"
+    end = "net1966"
+
+    path_str = repo_with_data._fetch_max_delay_path_string(start, end, depth=10)
+
+    assert path_str is not None, (
+        "CTE returned None! The recursive query logic is broken."
+    )
+    assert path_str == "u_cell_3491.ZN,net1966"
+
+
+def test_reconstruct_edges_works(repo_with_data):
+    """【Step 3】CSV文字列から Edge オブジェクトを復元できるか？"""
+    path_str = "u_cell_3491.ZN,net1966"
+
+    edges = repo_with_data._reconstruct_edges_from_path(path_str)
+
+    assert len(edges) == 1, "Reconstruction failed! Could not fetch edge from DB."
+    assert edges[0].src_node == "u_cell_3491.ZN"
+    assert edges[0].dst_node == "net1966"
+
+
+def test_end_to_end(repo_with_data):
+    path = repo_with_data.find_max_delay_path("u_cell_3491.ZN", "net1966")
+
+    assert path is not None
+    assert len(path) == 1
+    assert path[0].dst_node == "net1966"
